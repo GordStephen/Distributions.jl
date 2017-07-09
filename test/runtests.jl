@@ -26,6 +26,7 @@ tests = [
     "mixture",
     "gradlogpdf",
     "truncate",
+    "generic",
     "noncentralt"]
 
 print_with_color(:blue, "Running tests:\n")

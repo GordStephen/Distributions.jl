@@ -331,6 +331,7 @@ const discrete_distributions = [
     "binomial",
     "categorical",
     "discreteuniform",
+    "generic",
     "geometric",
     "hypergeometric",
     "negativebinomial",
