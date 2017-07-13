@@ -14,54 +14,35 @@ External links:
 * [Categorical distribution on Wikipedia](http://en.wikipedia.org/wiki/Categorical_distribution)
 """
 
-immutable Categorical{T<:Real} <: DiscreteUnivariateDistribution
-    K::Int
-    p::Vector{T}
+Categorical{T} = Generic{Int,T,UnitRange{Int}}
 
-    (::Type{Categorical{T}}){T}(p::Vector{T}, ::NoArgCheck) = new{T}(length(p), p)
+(::Type{Categorical})(p::Vector{P}, ::NoArgCheck) where P =
+    Generic{Int,P,UnitRange{Int}}(1:length(p), p, NoArgCheck())
 
-    function (::Type{Categorical{T}}){T}(p::Vector{T})
-        @check_args(Categorical, isprobvec(p))
-        new{T}(length(p), p)
-    end
-
-    function (::Type{Categorical{T}}){T}(k::Integer)
-        @check_args(Categorical, k >= 1)
-        new{T}(k, fill(1/k, k))
-    end
+function (::Type{Categorical})(p::Vector{P}) where P
+    @check_args(Generic, isprobvec(p))
+    Generic{Int,P,UnitRange{Int}}(1:length(p), p, NoArgCheck())
 end
 
-Categorical{T<:Real}(p::Vector{T}, ::NoArgCheck) = Categorical{T}(p, NoArgCheck())
-Categorical{T<:Real}(p::Vector{T}) = Categorical{T}(p)
-Categorical(k::Integer) = Categorical{Float64}(k)
+function (::Type{Categorical})(k::Integer)
+    @check_args(Generic, k >= 1)
+    Generic{Int,Float64,UnitRange{Int}}(1:k, fill(1/k, k), NoArgCheck())
+end
 
-@distr_support Categorical 1 d.K
+
+@distr_support Categorical 1 support(d).stop
 
 ### Conversions
 
 convert{T<:Real, S<:Real}(::Type{Categorical{T}}, p::Vector{S}) = Categorical(Vector{T}(p))
-convert{T<:Real, S<:Real}(::Type{Categorical{T}}, d::Categorical{S}) = Categorical(Vector{T}(d.p))
 
 ### Parameters
 
-ncategories(d::Categorical) = d.K
-probs(d::Categorical) = d.p
-params(d::Categorical) = (d.p,)
+ncategories(d::Categorical) = support(d).stop
+params(d::Categorical) = (probs(d),)
 @inline partype{T<:Real}(d::Categorical{T}) = T
 
-
 ### Statistics
-
-function categorical_mean{T<:Real}(p::AbstractArray{T})
-    k = length(p)
-    s = zero(T)
-    for i = 1:k
-        @inbounds s += p[i] * i
-    end
-    s
-end
-
-mean(d::Categorical) = categorical_mean(d.p)
 
 function median{T<:Real}(d::Categorical{T})
     k = ncategories(d)
@@ -74,42 +55,6 @@ function median{T<:Real}(d::Categorical{T})
     end
     i
 end
-
-function var{T<:Real}(d::Categorical{T})
-    k = ncategories(d)
-    p = probs(d)
-    m = categorical_mean(p)
-    s = zero(T)
-    for i = 1:k
-        @inbounds s += abs2(i - m) * p[i]
-    end
-    s
-end
-
-function skewness{T<:Real}(d::Categorical{T})
-    k = ncategories(d)
-    p = probs(d)
-    m = categorical_mean(p)
-    s = zero(T)
-    for i = 1:k
-        @inbounds s += (i - m)^3 * p[i]
-    end
-    v = var(d)
-    s / (v * sqrt(v))
-end
-
-function kurtosis{T<:Real}(d::Categorical{T})
-    k = ncategories(d)
-    p = probs(d)
-    m = categorical_mean(p)
-    s = zero(T)
-    for i = 1:k
-        @inbounds s += (i - m)^4 * p[i]
-    end
-    s / abs2(var(d)) - 3
-end
-
-entropy(d::Categorical) = entropy(d.p)
 
 function mgf{T<:Real}(d::Categorical{T}, t::Real)
     k = ncategories(d)
@@ -131,22 +76,6 @@ function cf{T<:Real}(d::Categorical{T}, t::Real)
     s
 end
 
-mode(d::Categorical) = indmax(probs(d))
-
-function modes(d::Categorical)
-    K = ncategories(d)
-    p = probs(d)
-    maxp = maximum(p)
-    r = Vector{Int}(0)
-    for k = 1:K
-        @inbounds if p[k] == maxp
-            push!(r, k)
-        end
-    end
-    r
-end
-
-
 ### Evaluation
 
 function cdf{T<:Real}(d::Categorical{T}, x::Int)
@@ -161,17 +90,15 @@ function cdf{T<:Real}(d::Categorical{T}, x::Int)
     return c
 end
 
-pdf{T<:Real}(d::Categorical{T}, x::Int) = insupport(d, x) ? d.p[x] : zero(T)
+pdf{T<:Real}(d::Categorical{T}, x::Int) = insupport(d, x) ? probs(d)[x] : zero(T)
 
-logpdf(d::Categorical, x::Int) = insupport(d, x) ? log(d.p[x]) : -Inf
-
-pdf(d::Categorical) = copy(d.p)
+logpdf(d::Categorical, x::Int) = insupport(d, x) ? log(probs(d)[x]) : -Inf
 
 function _pdf!{T<:Real}(r::AbstractArray, d::Categorical{T}, rgn::UnitRange)
     vfirst = round(Int, first(rgn))
     vlast = round(Int, last(rgn))
     vl = max(vfirst, 1)
-    vr = min(vlast, d.K)
+    vr = min(vlast, ncategories(d))
     p = probs(d)
     if vl > vfirst
         for i = 1:(vl - vfirst)
@@ -188,20 +115,6 @@ function _pdf!{T<:Real}(r::AbstractArray, d::Categorical{T}, rgn::UnitRange)
         end
     end
     return r
-end
-
-
-function quantile(d::Categorical, p::Float64)
-    0 <= p <= 1 || throw(DomainError())
-    k = ncategories(d)
-    pv = probs(d)
-    i = 1
-    v = pv[1]
-    while v < p && i < k
-        i += 1
-        @inbounds v += pv[i]
-    end
-    i
 end
 
 
