@@ -41,12 +41,12 @@ function AliasTable{T<:Real}(probs::AbstractVector{T})
     AliasTable(accp, alias, RangeGenerator(1:n))
 end
 
-function rand(s::AliasTable)
-    i = rand(GLOBAL_RNG, s.isampler)
-    u = rand()
+function rand(rng::MersenneTwister, s::AliasTable)
+    i = rand(rng, s.isampler)
+    u = rand(rng)
     @inbounds r = u < s.accept[i] ? i : s.alias[i]
     r
 end
+rand(s::AliasTable) = rand(GLOBAL_RNG, s)
 
 show(io::IO, s::AliasTable) = @printf(io, "AliasTable with %d entries", ncategories(s))
-

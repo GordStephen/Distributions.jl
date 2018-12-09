@@ -12,5 +12,7 @@ GenericSampler(support::S, probs::Vector{<:Real}) where {T<:Real,S<:AbstractVect
 sampler(d::Generic) =
     GenericSampler(d.support, d.p)
 
-rand(s::GenericSampler) =
-    (@inbounds v = s.support[rand(s.aliastable)]; v)
+rand(rng::MersenneTwister, s::GenericSampler) =
+    (@inbounds v = s.support[rand(rng, s.aliastable)]; v)
+
+rand(s::GenericSampler) = rand(GLOBAL_RNG, s)
